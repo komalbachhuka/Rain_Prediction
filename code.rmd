@@ -1,0 +1,137 @@
+---
+title: "rainseattle"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## R Markdown
+
+```{r}
+install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+install.packages("car", repos = "http://cran.us.r-project.org")
+install.packages("dplyr", repos = "http://cran.us.r-project.org")
+install.packages("plyr", repos = "http://cran.us.r-project.org")
+install.packages("Amelia", repos = "http://cran.us.r-project.org")
+install.packages("caTools", repos = "http://cran.us.r-project.org")
+install.packages("pROC",repos = "http://cran.us.r-project.org")
+
+library(tidyverse)
+library(dplyr)
+library(plyr)
+library(Amelia)
+library(ModelMetrics)
+library(caTools)
+library(pROC)
+
+```
+
+```{r}
+#Read the climate data from the csv
+
+rain_data <- read.csv("C:/Users/bachh/OneDrive/Desktop/Textbooks/TBANLT 540 (Regression)/Data/ClimateData_SeaTac.csv", header=T,na.strings = c(""))
+
+summary(rain_data)
+
+#Explain the dataset
+#Rain is the column which we are trying to predict.
+#NAME is the place where the weather data was recorded on respective DATE.
+#PRCP and SNOW = Precipitation and Snow in inches
+#SNWD = Snow depth
+#TAVG = Average Temperature in F
+#TMAX, TMIN = max and Min Temperature of the day in F.
+#WDF5, WSF5 - Direction of fastest 5-second wind in degree and Fastest 5-second wind speed respectively.
+
+```
+
+```{r}
+#Check for missing values.
+#Amelia library-visualizing missing details in the dataset.
+missmap(rain_data,main="Missing Values in Data Set")
+
+```
+#as there are a number of missing values in WT and PGTM columns, we will only use Rain, Ave.wind, PRCP, TAVG, TMAX, TMIN, WDF5 and WSF5
+
+```{r}
+rain_df <- subset(rain_data,select=c(3,4,6,7,9,10,11,12,13, 15))
+head(rain_df)
+```
+# finding missing values
+```{r}
+sapply(rain_df,function(x) sum(is.na(x)))
+# 0 indicated we have no missing values
+```
+
+```{r}
+rain_df$Rain <- factor(rain_df$Rain)
+rain_df$DATE <- as.Date(rain_df$DATE,'%m/%d/%Y')
+contrasts(rain_df$Rain)
+
+```
+
+```{r}
+# splitting data
+set.seed(88)
+split <- sample.split(rain_df$Rain,SplitRatio = 0.8)
+
+#Build the training and test chunks.
+train_df <- subset(rain_df,split==TRUE)
+test_df <- subset(rain_df,split==FALSE)
+summary(train_df)
+summary(test_df)
+
+```
+
+```{r}
+glm1 <- glm(Rain ~ AWND+SNOW+TAVG+TMAX+TMIN+WDF5+WSF5,family = binomial(link = "logit"),data = train_df)
+summary(glm1)
+anova(glm1,test='Chisq')
+```
+```{r}
+glm2 <- glm(Rain ~ AWND+TMAX+TMIN+WSF5,family = binomial(link = "logit"),data = train_df)
+summary(glm2)
+
+```
+
+```{r}
+glm3 <- glm(Rain ~ TMAX+TMIN+WSF5,family = binomial(link = "logit"),data = train_df)
+summary(glm3)
+
+```
+
+```{r}
+glm4 <- glm(Rain ~ TMAX+TMIN+WSF5, family = binomial(link = "logit"),data = train_df)
+summary(glm4)
+
+```
+## glm2 proves to be the best model with lowest AIC of 235.46
+```{r}
+
+predicted <- predict(glm2,newdata = test_df,type = "response")
+predicted <- ifelse(predicted > 0.5,1,0)
+head(data.frame(Date = test_df$DATE,Rain_Actual = test_df$Rain, Predicted_Rain = predicted))
+table(test_df$Rain, predicted)
+
+
+```
+
+```{r}
+#Now, we calculate the accuracy of our prediction.
+accuracy <- 1-mean(predicted != test_df$Rain)
+accuracy
+```
+## 78.09# accuracy
+```{r}
+ROCRPred <- prediction(predicted,test_df$Rain)
+ROCRperf <- performance(ROCRPred, measure='tpr', x.measure='fpr')
+
+#Plot the ROC curve
+
+plot(ROCRperf, colorize=TRUE)
+
+
+```
+
